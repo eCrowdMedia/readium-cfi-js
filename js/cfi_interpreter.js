@@ -76,6 +76,44 @@ var obj = {
         }
     },
 
+    // Description: Compare two given CFIs. Either CFI can be expressed in range form. Assuming the CFIs reference the same content document (partial CFIs)
+    //  Because of this the output is an array with two integers.
+    //  If both integers are the same then you can simplify the results into a single integer.
+    //  The integer indicates that:
+    //      -1 | CFI location point A is located before CFI location point B
+    //       0 | CFI location point A is the same as CFI location point B
+    //       1 | CFI location point A is located after CFI location point B
+    //  If both integers are different then the first integer is,
+    //      a comparison between the start location of CFI range A and the start location of CFI range B,
+    //  and the second integer is,
+    //      a comparison between the end location of CFI range A and the end location of CFI range B.
+    compareCFIs: function (cfiA, cfiB) {
+
+        var decomposedCFI1 = this._decomposeCFI(cfiA);
+        var decomposedCFI2 = this._decomposeCFI(cfiB);
+
+        if (decomposedCFI1.length > 1 && decomposedCFI2.length > 1) {
+            return [
+                this._compareCFIASTs(decomposedCFI1[0], decomposedCFI2[0]),
+                this._compareCFIASTs(decomposedCFI1[1], decomposedCFI2[1])
+            ];
+        } else if (decomposedCFI1.length > 1 && decomposedCFI2.length === 1) {
+            return [
+                this._compareCFIASTs(decomposedCFI1[0], decomposedCFI2[0]),
+                this._compareCFIASTs(decomposedCFI1[1], decomposedCFI2[0])
+            ];
+        } else if (decomposedCFI1.length === 1 && decomposedCFI2.length > 1) {
+            return [
+                this._compareCFIASTs(decomposedCFI1[0], decomposedCFI2[0]),
+                this._compareCFIASTs(decomposedCFI1[0], decomposedCFI2[1])
+            ];
+        } else {
+            var result = this._compareCFIASTs(decomposedCFI1[0], decomposedCFI2[0]);
+            return [result, result];
+        }
+    },
+
+
     // Description: Inject an arbitrary html element into a position in a content document referenced by a CFI
     injectElement : function (CFI, contentDocument, elementToInject, classBlacklist, elementBlacklist, idBlacklist) {
 
@@ -93,7 +131,7 @@ var obj = {
         indirectionNode.type = "indexStep";
 
         // Interpret the rest of the steps
-        $currElement = this.interpretLocalPath(CFIAST.cfiString.localPath, indirectionStepNum, $("html", contentDocument), classBlacklist, elementBlacklist, idBlacklist);
+        $currElement = this.interpretLocalPath(CFIAST.cfiString.localPath, indirectionStepNum, $(contentDocument.documentElement, contentDocument), classBlacklist, elementBlacklist, idBlacklist);
 
         // TODO: detect what kind of terminus; for now, text node termini are the only kind implemented
         $currElement = this.interpretTextTerminusNode(CFIAST.cfiString.localPath.termStep, $currElement, elementToInject);
@@ -121,7 +159,7 @@ var obj = {
         indirectionNode.type = "indexStep";
 
         // Interpret the rest of the steps in the first local path
-        $currElement = this.interpretLocalPath(CFIAST.cfiString.localPath, indirectionStepNum, $("html", contentDocument), classBlacklist, elementBlacklist, idBlacklist);
+        $currElement = this.interpretLocalPath(CFIAST.cfiString.localPath, indirectionStepNum, $(contentDocument.documentElement, contentDocument), classBlacklist, elementBlacklist, idBlacklist);
 
         // Interpret the first range local_path
         $range1TargetElement = this.interpretLocalPath(CFIAST.cfiString.range1, 0, $currElement, classBlacklist, elementBlacklist, idBlacklist);
@@ -156,7 +194,7 @@ var obj = {
         indirectionNode.type = "indexStep";
 
         // Interpret the rest of the steps
-        $currElement = this.interpretLocalPath(CFIAST.cfiString.localPath, indirectionStepNum, $("html", contentDocument), classBlacklist, elementBlacklist, idBlacklist);
+        $currElement = this.interpretLocalPath(CFIAST.cfiString.localPath, indirectionStepNum, $(contentDocument.documentElement, contentDocument), classBlacklist, elementBlacklist, idBlacklist);
 
         // Return the element at the end of the CFI
         return $currElement;
@@ -181,7 +219,7 @@ var obj = {
         indirectionNode.type = "indexStep";
 
         // Interpret the rest of the steps
-        $currElement = this.interpretLocalPath(CFIAST.cfiString.localPath, indirectionStepNum, $("html", contentDocument), classBlacklist, elementBlacklist, idBlacklist);
+        $currElement = this.interpretLocalPath(CFIAST.cfiString.localPath, indirectionStepNum, $(contentDocument.documentElement, contentDocument), classBlacklist, elementBlacklist, idBlacklist);
 
         // Interpret first range local_path
         $range1TargetElement = this.interpretLocalPath(CFIAST.cfiString.range1, 0, $currElement, classBlacklist, elementBlacklist, idBlacklist);
@@ -218,7 +256,7 @@ var obj = {
         var indirectionNode;
 
         // Interpret the path node
-        var $currElement = this.interpretIndexStepNode(CFIAST.cfiString.path, $("html", contentDocument), classBlacklist, elementBlacklist, idBlacklist);
+        var $currElement = this.interpretIndexStepNode(CFIAST.cfiString.path, $(contentDocument.documentElement, contentDocument), classBlacklist, elementBlacklist, idBlacklist);
 
         // Interpret the rest of the steps
         $currElement = this.interpretLocalPath(CFIAST.cfiString.localPath, 0, $currElement, classBlacklist, elementBlacklist, idBlacklist);
@@ -235,7 +273,6 @@ var obj = {
     //        that has no defined meaning in the spec.)
     //     contentDocument : A DOM representation of the content document to which the partial CFI refers.
     // }
-    // Rationale: This method exists to meet the requirements of the Readium-SDK and should be used with care
     getTextTerminusInfoWithPartialCFI : function (contentDocumentCFI, contentDocument, classBlacklist, elementBlacklist, idBlacklist) {
 
         var decodedCFI = decodeURI(contentDocumentCFI);
@@ -244,28 +281,68 @@ var obj = {
         var textOffset;
 
         // Interpret the path node
-        var $currElement = this.interpretIndexStepNode(CFIAST.cfiString.path, $("html", contentDocument), classBlacklist, elementBlacklist, idBlacklist);
+        var $currElement = this.interpretIndexStepNode(CFIAST.cfiString.path, $(contentDocument.documentElement, contentDocument), classBlacklist, elementBlacklist, idBlacklist);
 
         // Interpret the rest of the steps
         $currElement = this.interpretLocalPath(CFIAST.cfiString.localPath, 0, $currElement, classBlacklist, elementBlacklist, idBlacklist);
 
         // Return the element at the end of the CFI
         textOffset = parseInt(CFIAST.cfiString.localPath.termStep.offsetValue);
-        return { textNode : $currElement[0],
-                 textOffset : textOffset
-            };
+        return {
+            textNode: $currElement[0],
+            textOffset: textOffset
+        };
+    },
+
+    // Description: This method will return the element or node (say, a text node) that is the final target of the
+    //   the CFI, along with the text terminus offset.
+    getTextTerminusInfo : function (CFI, contentDocument, classBlacklist, elementBlacklist, idBlacklist) {
+
+        var decodedCFI = decodeURI(CFI);
+        var CFIAST = cfiParser.parse(decodedCFI);
+        var indirectionNode;
+        var indirectionStepNum;
+        var $currElement;
+        var textOffset;
+
+        // Rationale: Since the correct content document for this CFI is already being passed, we can skip to the beginning
+        //   of the indirection step that referenced the content document.
+        // Note: This assumes that indirection steps and index steps conform to an interface: an object with stepLength, idAssertion
+        indirectionStepNum = this.getFirstIndirectionStepNum(CFIAST);
+        indirectionNode = CFIAST.cfiString.localPath.steps[indirectionStepNum];
+        indirectionNode.type = "indexStep";
+
+        // Interpret the rest of the steps
+        $currElement = this.interpretLocalPath(CFIAST.cfiString.localPath, indirectionStepNum, $(contentDocument.documentElement, contentDocument), classBlacklist, elementBlacklist, idBlacklist);
+
+        // Return the element at the end of the CFI
+        textOffset = parseInt(CFIAST.cfiString.localPath.termStep.offsetValue);
+        return {
+            textNode: $currElement[0],
+            textOffset: textOffset
+        };
     },
 
     // Description: This function will determine if the input "partial" CFI is expressed as a range
-    isRangeCfi: function (cfi) {
-        var CFIAST = cfiParser.parse(cfi);
-        return CFIAST.cfiString.range1 ? true : false;
+    isRangeCfi: function (CFI) {
+
+        var decodedCFI = CFI ? decodeURI(CFI) : undefined;
+        var CFIAST = cfiParser.parse(decodedCFI);
+        if (!CFIAST || CFIAST.type !== "CFIAST") {
+            throw cfiRuntimeErrors.NodeTypeError(CFIAST, "expected CFI AST root node");
+        }
+        return CFIAST.cfiString.type === "range";
     },
 
     // Description: This function will determine if the input "partial" CFI has a text terminus step
-    hasTextTerminus: function (cfi) {
-        var CFIAST = cfiParser.parse(cfi);
-        return CFIAST.cfiString.localPath.termStep ? true : false;
+    hasTextTerminus: function (CFI) {
+
+        var decodedCFI = CFI ? decodeURI(CFI) : undefined;
+        var CFIAST = cfiParser.parse(decodedCFI);
+        if (!CFIAST || CFIAST.type !== "CFIAST") {
+            throw cfiRuntimeErrors.NodeTypeError(CFIAST, "expected CFI AST root node");
+        }
+        return !!CFIAST.cfiString.localPath.termStep;
     },
 
     // ------------------------------------------------------------------------------------ //
@@ -395,13 +472,89 @@ var obj = {
             }
 
             // Found the content document href referenced by the spine item
-            if ($currElement.is("itemref")) {
-
+            if (cfiInstructions._matchesLocalNameOrElement($currElement[0], "itemref")) {
                 return cfiInstructions.retrieveItemRefHref($currElement, $packageDocument);
             }
         }
 
         return undefined;
+    },
+
+    _splitRangeCFIAST: function(CFIAST, firstRange) {
+        var outCFIAST = $.extend(true, {}, CFIAST);
+        var targetRange = firstRange? CFIAST.cfiString.range1 : CFIAST.cfiString.range2;
+
+        delete outCFIAST.cfiString.range1;
+        delete outCFIAST.cfiString.range2;
+        outCFIAST.cfiString.type = "path";
+
+        outCFIAST.cfiString.localPath.steps = outCFIAST.cfiString.localPath.steps.concat(targetRange.steps);
+        outCFIAST.cfiString.localPath.termStep = targetRange.termStep;
+
+        return outCFIAST;
+    },
+    _decomposeCFI: function (CFI) {
+        var decodedCFI = decodeURI(CFI);
+        var CFIAST = cfiParser.parse(decodedCFI);
+
+        if (!CFIAST || CFIAST.type !== "CFIAST") {
+            throw cfiRuntimeErrors.NodeTypeError(CFIAST, "expected CFI AST root node");
+        }
+
+        var decomposedASTs = [];
+        if (CFIAST.cfiString.type === "range") {
+            decomposedASTs.push(this._splitRangeCFIAST(CFIAST, true));
+            decomposedASTs.push(this._splitRangeCFIAST(CFIAST, false));
+        } else {
+            decomposedASTs.push(CFIAST);
+        }
+
+        return decomposedASTs;
+    },
+    _concatStepsFromCFIAST: function(CFIAST) {
+        return CFIAST.cfiString.localPath.steps.map(function (o) {
+            return parseInt(o.stepLength);
+        });
+    },
+    _compareCFIASTs: function (CFIAST1, CFIAST2) {
+
+        var result = null;
+        var index = 0;
+        var steps1 = this._concatStepsFromCFIAST(CFIAST1);
+        var steps2 = this._concatStepsFromCFIAST(CFIAST2);
+        var term1 = CFIAST1.cfiString.localPath.termStep;
+        var term2 = CFIAST2.cfiString.localPath.termStep;
+
+        while (true) {
+            var L = steps1[index];
+            var R = steps2[index];
+            if (!L || !R) {
+                if (result === 0 && (term1.offsetValue || term2.offsetValue)) {
+                    var tL = parseInt(term1.offsetValue) || 0;
+                    var tR = parseInt(term2.offsetValue) || 0;
+                    if (tL > tR) {
+                        result = 1;
+                    } else if (tL < tR) {
+                        result = -1;
+                    } else {
+                        result = 0;
+                    }
+                }
+                break;
+            }
+            if (L > R) {
+                result = 1;
+                break;
+            } else if (L < R) {
+                result = -1;
+                break;
+            } else {
+                result = 0;
+            }
+            index = index + 1;
+        }
+
+        return result;
     }
 };
 
